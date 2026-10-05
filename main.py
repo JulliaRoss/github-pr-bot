@@ -1,4 +1,4 @@
-def conta (num):
-    if num > 0:
-        num = num + 1
-    return num
+def conta (n):
+    if n > 0:
+        n = n + 1
+    return n
