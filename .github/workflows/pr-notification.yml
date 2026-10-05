@@ -1,0 +1,75 @@
+name: Notify Teams on PR opened
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  notify-teams:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Adaptive Card to Teams
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TEAMS_WEBHOOK_URL}" ]; then
+            echo "::error::Secret TEAMS_WEBHOOK_URL não está configurado."
+            exit 1
+          fi
+
+          payload=$(jq -n \
+            --arg title  "$PR_TITLE" \
+            --arg author "$PR_AUTHOR" \
+            --arg number "$PR_NUMBER" \
+            --arg url    "$PR_URL" \
+            --arg repo   "$REPO" \
+            '{
+              type: "message",
+              attachments: [{
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: {
+                  type: "AdaptiveCard",
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  version: "1.4",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      size: "Medium",
+                      weight: "Bolder",
+                      wrap: true,
+                      text: ("Novo PR #" + $number + ": " + $title)
+                    },
+                    {
+                      type: "FactSet",
+                      facts: [
+                        { title: "Repositório", value: $repo },
+                        { title: "Autor",       value: $author },
+                        { title: "Número",      value: ("#" + $number) }
+                      ]
+                    }
+                  ],
+                  actions: [
+                    {
+                      type: "Action.OpenUrl",
+                      title: "Abrir PR no GitHub",
+                      url: $url
+                    }
+                  ]
+                }
+              }]
+            }')
+
+          curl -sSf \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$TEAMS_WEBHOOK_URL"
